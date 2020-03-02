@@ -30,12 +30,28 @@ class Executor(AbstractExecutor):
         'TIMEOUT'
     )
 
-    def __init__(self, partition):
+    def __init__(self, partition, **kwargs):
         if not self.available():
             raise SlurmNotFound()
         self.partition = partition
         self.polling_interval = 5
         self.timeout = 60
+        self._default_args = self.default_args(**kwargs)
+
+    def default_args(self, **kwargs):
+        args = list()
+        for k,v in iter(kwargs.items()):
+            if k == 'nodes':
+                args.extend([
+                    '--nodelist', ','.join(v)
+                ])
+            elif k == 'exclude':
+                args.extend([
+                    '--exclude', ','.join(v)
+                ])
+            else:
+                logger.warn('unrecognized executor argument "%s"', k)
+        return args
 
     @staticmethod
     def available():
@@ -54,6 +70,7 @@ class Executor(AbstractExecutor):
             '--parsable',
             '--partition', self.partition
         ]
+        cmd.extend(self._default_args)
         cmd.extend(self._arguments(job))
         cmd.extend([
             '--wrap', command

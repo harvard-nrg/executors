@@ -23,12 +23,19 @@ class Executor(AbstractExecutor):
         'ZOMBI'    # zombie state
     )
 
-    def __init__(self, partition):
+    def __init__(self, partition, **kwargs):
         if not self.available():
             raise BsubNotFound()
         self.partition = partition
         self.polling_interval = 5
         self.timeout = 60
+        self._default_args = self.default_args(**kwargs)
+
+    def default_args(self, **kwargs):
+        args = list()
+        for k,v in iter(kwargs.items()):
+            logger.warn('unrecognized executor argument "%s"', k)
+        return args
 
     @staticmethod
     def available():
@@ -51,6 +58,7 @@ class Executor(AbstractExecutor):
             'bsub',
             '-q', self.partition
         ]
+        cmd.extend(self._default_args)
         cmd.extend(self._arguments(job))
         cmd.extend([
             command

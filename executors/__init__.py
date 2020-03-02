@@ -15,15 +15,15 @@ def get(name, partition):
     if name == 'lsf':
         return lsf.Executor(partition)
 
-def probe(partition):
+def probe(partition, **kwargs):
     if slurm.Executor.available():
         logger.debug('detected slurm job scheduler')
-        return slurm.Executor(partition)
+        return slurm.Executor(partition, **kwargs)
     if pbsubmit.Executor.available():
         logger.debug('detected pbsubmit job scheduler')
-        return pbsubmit.Executor(partition)
+        return pbsubmit.Executor(partition, **kwargs)
     if lsf.Executor.available():
-        return lsf.Executor(partition)
+        return lsf.Executor(partition, **kwargs)
     raise NoSchedulerDetected()
 
 def which(x):

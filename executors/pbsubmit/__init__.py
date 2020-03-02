@@ -22,12 +22,24 @@ class Executor(AbstractExecutor):
         'C',    # complete
     )
 
-    def __init__(self, partition):
+    def __init__(self, partition, **kwargs):
         if not self.available():
             raise PBSubmitNotFound()
         self.partition = partition
         self.polling_interval = 5
         self.timeout = 60
+        self._default_args = self.default_args(**kwargs)
+
+    def default_args(self, **kwargs):
+        args = list()
+        for k,v in iter(kwargs.items()):
+            if k == 'nodes':
+                args.extend([
+                    '-l', '+'.join(v)
+                ])
+            else:
+                logger.warn('unrecognized Executor argument "%s"', k)
+        return args
 
     @staticmethod
     def available():
@@ -204,12 +216,12 @@ class Executor(AbstractExecutor):
         if hasattr(job, 'processors') and job.processors:
             qsub_opts['ppn'] = job.processors
         # build and append pass-through qsub options
-        qsub_opt = 'nodes={NODES}:ppn={PPN},vmem={VMEM}'.format(
+        qsub_opts = 'nodes={NODES}:ppn={PPN},vmem={VMEM}'.format(
             NODES=qsub_opts.get('nodes', 1),
             PPN=qsub_opts.get('ppn', 1),
             VMEM=qsub_opts.get('vmem', '1gb')
         )
-        arguments.extend(['-l', qsub_opt])
+        arguments.extend(['-l', qsub_opts])
         return arguments
 
 class PBSubmitNotFound(ExecutorNotFound):
