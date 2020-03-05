@@ -36,21 +36,25 @@ class Executor(AbstractExecutor):
         self.partition = partition
         self.polling_interval = 5
         self.timeout = 60
-        self._default_args = self.default_args(**kwargs)
+        self.args = self.translate(kwargs)
 
-    def default_args(self, **kwargs):
+    def translate(self, kwargs):
         args = list()
         for k,v in iter(kwargs.items()):
-            if k == 'nodes':
+            if k == 'nodelist':
+                if not isinstance(v, list):
+                    raise SbatchError('nodelist argument must be a list')
                 args.extend([
                     '--nodelist', ','.join(v)
                 ])
             elif k == 'exclude':
+                if not isinstance(v, list):
+                    raise SbatchError('nodelist argument must be a list')
                 args.extend([
                     '--exclude', ','.join(v)
                 ])
             else:
-                logger.warn('unrecognized executor argument "%s"', k)
+                logger.warn('unrecognized argument "%s"', k)
         return args
 
     @staticmethod
@@ -70,7 +74,7 @@ class Executor(AbstractExecutor):
             '--parsable',
             '--partition', self.partition
         ]
-        cmd.extend(self._default_args)
+        cmd.extend(self.args)
         cmd.extend(self._arguments(job))
         cmd.extend([
             '--wrap', command
@@ -189,3 +193,5 @@ class SacctError(Exception):
 class SlurmNotFound(ExecutorNotFound):
     pass
 
+class SbatchError(Exception):
+    pass

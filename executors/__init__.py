@@ -7,13 +7,13 @@ import executors.pbsubmit as pbsubmit
 
 logger = logging.getLogger(__name__)
 
-def get(name, partition):
+def get(name, partition, **kwargs):
     if name == 'slurm':
-        return slurm.Executor(partition)
+        return slurm.Executor(partition, **kwargs)
     if name == 'pbsubmit':
-        return pbsubmit.Executor(partition)
+        return pbsubmit.Executor(partition, **kwargs)
     if name == 'lsf':
-        return lsf.Executor(partition)
+        return lsf.Executor(partition, **kwargs)
 
 def probe(partition, **kwargs):
     if slurm.Executor.available():

@@ -13,7 +13,7 @@ class Job(object):
         self.parent = parent
         self.output = output
         self.error = error
-        # these will be set by an Executor object
+        # these are set by the Executor object
         self.pid = None
         self.returncode = None
         self.active = None
@@ -31,10 +31,12 @@ class JobArray(object):
     def add(self, job):
         self.array.append(job)
 
-    def submit(self):
+    def submit(self, interval=None):
         for job in self.array:
             self.E.submit(job)
             self.running[job.pid] = job
+            if interval:
+                time.sleep(interval)
 
     def update(self):
         self.E.update_many(self.running.values())
