@@ -5,7 +5,7 @@ import csv
 import time
 import logging
 import subprocess as sp
-from executors.commons import which
+import executors.commons as commons
 from executors.models import AbstractExecutor
 from executors.exceptions import ExecutorNotFound, CommandNotFound, TimeoutError
 
@@ -13,21 +13,22 @@ logger = logging.getLogger('slurm')
 
 class Executor(AbstractExecutor):
     ACTIVE = (
-        'PENDING',
-        'CONFIGURING',
-        'RUNNING',
-        'RESIZING',
-        'SUSPENDED',
-        'COMPLETING'
+        r'PENDING',
+        r'CONFIGURING',
+        r'RUNNING',
+        r'RESIZING',
+        r'SUSPENDED',
+        r'COMPLETING'
     )
     INACTIVE = (
-        'COMPLETED',
-        'CANCELLED',
-        'FAILED',
-        'OUT_OF_MEMORY', 
-        'NODE_FAIL',
-        'PREEMPTED', 
-        'TIMEOUT'
+        r'COMPLETED',
+        r'CANCELLED',
+        r'CANCELLED by \d+',
+        r'FAILED',
+        r'OUT_OF_MEMORY', 
+        r'NODE_FAIL',
+        r'PREEMPTED', 
+        r'TIMEOUT'
     )
 
     def __init__(self, partition, **kwargs):
@@ -53,13 +54,17 @@ class Executor(AbstractExecutor):
                 args.extend([
                     '--exclude', ','.join(v)
                 ])
+            elif k == 'reservation':
+                args.extend([
+                    '--reservation', v
+                ])
             else:
                 logger.warn('unrecognized argument "%s"', k)
         return args
 
     @staticmethod
     def available():
-        if which('sbatch'):
+        if commons.which('sbatch'):
             return True
         return False
 
@@ -67,7 +72,7 @@ class Executor(AbstractExecutor):
         command = job.command
         if isinstance(command, list):
             command = sp.list2cmdline(command)
-        if not which('sbatch'):
+        if not commons.which('sbatch'):
             raise CommandNotFound('sbatch')
         cmd = [
             'sbatch',
@@ -101,7 +106,7 @@ class Executor(AbstractExecutor):
             time.sleep(self.polling_interval)
 
     def _cancel_async(self, job_id):
-        if not which('scancel'):
+        if not commons.which('scancel'):
             raise CommandNotFound('scancel')
         cmd = [
             'scancel',
@@ -124,9 +129,9 @@ class Executor(AbstractExecutor):
         # assume the return code is the greater of the two
         exit_status = max([int(sbatch_code), int(job_code)])
         logger.debug('pid {0} is in "{1}" state'.format(job.pid, job_state))
-        if job_state in Executor.ACTIVE:
+        if commons.match(job_state, Executor.ACTIVE):
             job.active = True
-        elif job_state in Executor.INACTIVE:
+        elif commons.match(job_state, Executor.INACTIVE):
             job.active = False
             job.returncode = int(exit_status)
 
@@ -155,7 +160,7 @@ class Executor(AbstractExecutor):
         Run sacct command on a job and serialize output
         '''
         # build the sacct command
-        if not which('sacct'):
+        if not commons.which('sacct'):
             raise CommandNotFound('sacct') 
         cmd = [
             'sacct',
