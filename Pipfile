@@ -8,4 +8,5 @@ pytest = "*"
 
 [packages]
 paramiko = "*"
-executors = {path = ".", editable = true}
+ratelimit = "*"
+executors = {path = ".",editable = true}

@@ -55,7 +55,7 @@ def main():
 
     # run the job array
     jobarray.submit()
-    jobarray.wait(wait=True)
+    jobarray.wait(confirm_cancel=True)
 
 if __name__ == '__main__':
     main()

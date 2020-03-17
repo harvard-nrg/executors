@@ -58,8 +58,8 @@ def main():
     
     # wait for parent and child jobs to complete
     while True:
-        E.update(parent)
-        E.update(child)
+        E.update(parent, wait=True)
+        E.update(child, wait=True)
         if not parent.active:
             logger.info('parent job %s has finished with returncode %s', parent.pid, parent.returncode)
         if not child.active:

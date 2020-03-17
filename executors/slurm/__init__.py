@@ -8,6 +8,7 @@ import subprocess as sp
 import executors.commons as commons
 from executors.models import AbstractExecutor
 from executors.exceptions import ExecutorNotFound, CommandNotFound, TimeoutError
+from ratelimit import limits, sleep_and_retry
 
 logger = logging.getLogger('slurm')
 
@@ -32,14 +33,24 @@ class Executor(AbstractExecutor):
     )
 
     def __init__(self, partition, **kwargs):
+        '''
+        :param partition: Slurm partition
+        :type partition: str
+        :param nodelist: List of nodes to include (optional)
+        :type nodelist: list
+        :param exclude: Nodes to exclude (optional)
+        :type nodelist: list
+        :param reservation: Slurm reservation (optional)
+        :type reservation: str
+        '''
         if not self.available():
             raise SlurmNotFound()
         self.partition = partition
-        self.polling_interval = 5
-        self.timeout = 60
-        self.args = self.translate(kwargs)
+        self.poll_timeout = 60
+        self.poll_delay = 1
+        self.args = self._translate(kwargs)
 
-    def translate(self, kwargs):
+    def _translate(self, kwargs):
         args = list()
         for k,v in iter(kwargs.items()):
             if k == 'nodelist':
@@ -64,14 +75,23 @@ class Executor(AbstractExecutor):
 
     @staticmethod
     def available():
+        '''
+        Check if Slurm is available on the system.
+        '''
         if commons.which('sbatch'):
             return True
         return False
 
-    def submit(self, job):
-        command = job.command
-        if isinstance(command, list):
-            command = sp.list2cmdline(command)
+    def submit(self, job, **kwargs):
+        '''
+        Submit a job with sbatch. Pass wrap=False to disable wrapping the 
+        command.
+
+        :param job: Job object
+        :type job: :mod:`executors.models.Job`
+        :param wrap: Disable wrapping
+        :type wrap: bool
+        '''
         if not commons.which('sbatch'):
             raise CommandNotFound('sbatch')
         cmd = [
@@ -81,14 +101,34 @@ class Executor(AbstractExecutor):
         ]
         cmd.extend(self.args)
         cmd.extend(self._arguments(job))
-        cmd.extend([
-            '--wrap', command
-        ])
+        wrap = kwargs.get('wrap', True)
+        command = job.command
+        if wrap:
+            if isinstance(command, list):
+                command = sp.list2cmdline(command)
+            cmd.extend([
+                '--wrap', command
+            ])
+        else:
+            if isinstance(command, six.string_types):
+                command = shlex.split(command)
+            cmd.extend(command)
         logger.debug(cmd)
         pid =  sp.check_output(cmd).strip().decode()
         job.pid = pid
 
     def cancel(self, job, wait=False):
+        '''
+        Send scancel to a Slurm job. 
+
+        Since cancelling a job in Slurm is inherently asyncronous, pass 
+        wait=True to wait until the job state is updated.
+
+        :param job: Job object
+        :type job: :mod:`executors.models.Job`
+        :param wait: Wait until the job state is updated
+        :type wait: bool
+        '''
         job_id = job.pid + '.batch'
         if not wait:
             self._cancel_async(job.pid)
@@ -101,9 +141,9 @@ class Executor(AbstractExecutor):
             self.update(job)
             if not job.active:
                 break
-            if time.time() - tic > self.timeout:
-                raise TimeoutError('exceeded wait time {0}s for job {1}'.format(self.timeout, job_id))
-            time.sleep(self.polling_interval)
+            if time.time() - tic > self.poll_timeout:
+                raise TimeoutError('exceeded wait time {0}s for job {1}'.format(self.poll_timeout, job_id))
+            time.sleep(self.poll_delay)
 
     def _cancel_async(self, job_id):
         if not commons.which('scancel'):
@@ -116,6 +156,17 @@ class Executor(AbstractExecutor):
         sp.check_output(cmd)
 
     def update(self, job, wait=False):
+        '''
+        Update a single job state.
+
+        Since querying job state in Slurm is inherently asyncronous, you must 
+        pass wait=True to wait until the job state is updated.
+
+        :param job: Job object
+        :type job: :mod:`executors.models.Job`
+        :param wait: Wait for job state to be updated
+        :type wait: bool
+        '''
         # run sacct
         rows = self.sacct(job, wait=wait)
         # we should only have one row at this point
@@ -136,12 +187,36 @@ class Executor(AbstractExecutor):
             job.returncode = int(exit_status)
 
     def update_many(self, jobs, wait=False):
+        '''
+        Update multiple job states.
+
+        Since querying job state in Slurm is inherently asyncronous, you must 
+        pass wait=True to wait until the job state is updated.
+
+        :param jobs: List of :mod:`executors.models.Job` objects
+        :type jobs: list
+        :param wait: Wait for job state to be updated
+        :type wait: bool
+        '''
+        # this should be implemented as one call
         for job in jobs:
             self.update(job, wait=wait)
 
     def sacct(self, job, wait=False):
+        '''
+        Run the sacct and return all rows. This method is rate limited to 
+        5 calls every 20 seconds.
+
+        Since sacct is inherently asyncronous, pass wait=True to wait until 
+        the job state is updated.
+
+        :param job: Job object
+        :type job: :mod:`executors.models.Job`
+        :param wait: Wait for job state to be updated
+        :type wait: bool
+        '''
         job_id = job.pid + '.batch'
-        # return sacct output immediately
+        # return whatever sacct output is immediately
         if not wait:
             return self._sacct_async(job_id)
         # wait for the job to appear in sacct or timeout
@@ -151,13 +226,21 @@ class Executor(AbstractExecutor):
             rows = self._sacct_async(job_id)
             if rows:
                 return rows
-            if time.time() - tic > self.timeout:
-                raise TimeoutError('exceeded wait time {0}s for job {1}'.format(self.timeout, job_id))
-            time.sleep(self.polling_interval)
+            if time.time() - tic > self.poll_timeout:
+                raise TimeoutError('exceeded wait time {0}s for job {1}'.format(self.poll_timeout, job_id))
+            time.sleep(self.poll_delay)
 
+    @sleep_and_retry
+    @limits(calls=5, period=20)
     def _sacct_async(self, job_id):
         '''
-        Run sacct command on a job and serialize output
+        Run sacct command on a job and serialize output. This method is rate 
+        limited to 5 calls every 20 seconds.
+
+        :param job_id: Slurm job ID
+        :type job_id: str
+        :returns: List of sacct rows
+        :rtype: list
         '''
         # build the sacct command
         if not commons.which('sacct'):
