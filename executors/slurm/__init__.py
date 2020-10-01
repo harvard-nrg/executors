@@ -265,6 +265,10 @@ class Executor(AbstractExecutor):
             arguments.extend(['--job-name', job.name])
         if hasattr(job, 'memory') and job.memory:
             arguments.extend(['--mem', job.memory])
+        if hasattr(job, 'cpus') and job.cpus:
+            arguments.extend(['--ntasks', str(job.cpus)])
+        if hasattr(job, 'nodes') and job.nodes:
+            arguments.extend(['--nodes', str(job.nodes)])
         if hasattr(job, 'output') and job.output:
             arguments.extend(['--output', os.path.expanduser(job.output)])
         if hasattr(job, 'error') and job.error:

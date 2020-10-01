@@ -1,17 +1,19 @@
 Executors
 =========
-If you want to write scripts that will work transparently across different job 
-schedulers, things can get weird pretty quickly.
+If you want to write scripts that work transparently across different job 
+schedulers, things can get weird, and it's easy to find yourself locked into 
+a specific job scheduler. Executors tries to eliminate this challenge. Just 
+tell Executors to run a command and it will run it on whatever is available.
 
-Executors provides a consistent API around different job schedulers. Each 
-scheduler module provides an `Executor` class with methods to `submit`, `update`,
-and `cancel` jobs. With these methods at your disposal, you can build more portable 
-tools quickly.
+Each scheduler within Executors will expose methods to `submit`, `update`, and 
+`cancel` a job. With these methods, you can build fairly sophisticated tools 
+quickly. If you need to run on your local machine today, Slurm tomorrow, and 
+LSF next week, you don't need to change anything. 
 
-Executors also provides a special `JobArray` class for building and controlling 
-collections of jobs as a single unit. There are no restrictions on the size 
-or shape of jobs added to a `JobArray` and you can set behaviors such as killing 
-all remaining jobs if a single job fails.
+Executors also provides a special `JobArray` class for building and managing 
+collections of jobs as a single object. There are no restrictionson the size 
+or shape of jobs that you can add to a `JobArray`. You can also setup 
+convenient behaviors such as killing all remaining jobs if a single job fails.
 
 ## Table of contents
 1. [Installation](#installation)
@@ -38,15 +40,16 @@ The following job schedulers are supported
 * `slurm` - Simple Linux Utility for Resource Management
 * `lsf` - IBM Platform LSF
 * `pbsubmit` - Martinos Center Torque wrapper
+* `local` - Local job executor
 
 ## Usage
-The goal is to keep this section as small as possible and get you up and running 
-as quickly as possible. Here goes!
+The goal is to keep this section as small as possible to get you up and running 
+as quickly as possible. Here we go!
 
 ### instantiate an `Executor`
 To start using Executors, you need to instantiate an `Executor` object. You can 
-do this one of two ways. First, you can use `executors.probe` to automatically 
-discover the scheduler present in your environment and instantiate it
+do this in one of two ways. First, you can use `executors.probe` to 
+automatically discover the job scheduler present in your environment
 
 ```python
 import executors
@@ -54,21 +57,22 @@ import executors
 E = executors.probe('partition_name')
 ```
 
-Or you can explicitly load an `Executor` using `executors.get`, passing in the 
-type of scheduler as the first argument
+Alternatively, you can explicitly load an `Executor` using `executors.get`, 
+passing in the type of scheduler as the first argument
 
 ```python
 import executors
 
-E = executors.get('slurm', 'partition_name')
+E = executors.get('local')
 ```
 
-Take note that you also have to pass in a `partition` argument, also known as a 
-`queue` in other job schedulers.
+Note that for schedulers other than `local`, you will need to pass in a second 
+argument called `partition_name`. This referred to as a `queue` in some job 
+schedulers.
 
 ### instantiate a `Job`
-Next, you have to instantiate a `Job` object. See below for descriptions of 
-supported arguments
+Next, you have to create a `Job`. See below for descriptions of the supported 
+arguments
 
 ```python
 from executors.models import Job
@@ -78,6 +82,8 @@ job = Job(
     command=['echo', 'Hello, World!'],
     memory='100M',
     time='10',
+    cpus=1,
+    nodes=1,
     output='~/job-%j.stdout',
     error='~/job-%j.stderr',
     parent=parent
@@ -88,12 +94,14 @@ job = Job(
 * `command`: Command to be executed (required)
 * `memory`: Amount of memory required e.g., `1000K`, `100M`, `10G`, `1TB` (required)
 * `time`: Amount of time required in seconds (required)
+* `cpus`: Number of processors needed (default=1)
+* `nodes`: Number of nodes needed (default=1)
 * `output`: Path to standard output. Any occurrence of `%j` will be replaced with Job ID.
 * `error`: Path to standard error. Any occurrence of `%j` will be replaced with Job ID.
 * `parent`: Parent job object a.k.a job dependency.
 
 ### submit the `Job`
-Now you can submit the `Job` using your executor object `E`. Once the job has 
+Now you can submit your `job` using your executor object `E`. Once the job has 
 been submitted, the `job.pid` property will be set
 
 ```python
@@ -101,20 +109,22 @@ E.submit(job)
 print('the job id is {0}'.format(job.pid))
 ```
 
+When the job finishes, you can check it's `returncode`.
+
 ### updating the `Job` state
-Each `Job` object has an `active` and `returncode` property. By default, these 
-are both set to `None`. These properties will be updated each time you call 
+Each `Job` has an `active` and `returncode` property. By default, these are 
+both set to `None`. These properties will be updated each time you call 
 `E.update(job)`
 
 ```python
 E.update(job)
-print('job {0} active state is {1}'.format(job.pid, job.active))
+print('job {0} has state {1} and returncode is {2}'.format(job.pid, job.active, job.returncode))
 ```
 
 > Some job schedulers will allow you to submit a job but you cannot instantly 
-> query the job status, therefore Executors cannot always *guarantee* that 
+> begin querying the job state, therefore Executors cannot always *guarantee* that 
 > `E.update` will update the `Job` state. If you must have `E.update` wait until 
-> a job is visible, add the argument `wait=True`. 
+> a job is visible, add the argument `wait=True`.
 
 ### update many `Job` states
 Some job schedulers offer more efficient ways to query the state of multiple 
@@ -147,8 +157,15 @@ jobarray.submit()
 jobarray.wait()
 ```
 
+To impose rate limiting on the number of jobs running concurrently, use the 
+`limit` argument. For example, to only have 1 job running at a time
+
+```python
+jobarray.submit(limit=1)
+```
+
 ## Extending Executors
-It is fairly simple to extend Executors as you encounter new schedulers. First 
+It's fairly simple to extend Executors as you encounter new schedulers. First 
 you must create a new module within the top-level `executors` module, for example
 
 ```bash

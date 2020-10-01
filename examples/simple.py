@@ -12,7 +12,8 @@ logging.basicConfig(level=logging.DEBUG)
 
 def main():
     parser = ap.ArgumentParser()
-    parser.add_argument('-p', '--partition', required=True)
+    parser.add_argument('-s', '--scheduler')
+    parser.add_argument('-p', '--partition', default=None)
     parser.add_argument('--debug', action='store_true')
     parser.add_argument('command', nargs=ap.REMAINDER)
     args = parser.parse_args()
@@ -21,7 +22,10 @@ def main():
         logger.setLevel(logging.DEBUG)
 
     # get executor
-    E = executors.probe(args.partition)
+    if args.scheduler:
+        E = executors.get(args.scheduler, args.partition)
+    else:
+        E = executors.probe(args.partition)
 
     # create a job 
     logger.info('building the job object')

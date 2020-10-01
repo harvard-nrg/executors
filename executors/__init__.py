@@ -3,17 +3,21 @@ import sys
 import logging
 import executors.lsf as lsf
 import executors.slurm as slurm
+import executors.local as local
 import executors.pbsubmit as pbsubmit
 
 logger = logging.getLogger(__name__)
 
-def get(name, partition, **kwargs):
+def get(name, partition='default', **kwargs):
     if name == 'slurm':
         return slurm.Executor(partition, **kwargs)
     if name == 'pbsubmit':
         return pbsubmit.Executor(partition, **kwargs)
     if name == 'lsf':
         return lsf.Executor(partition, **kwargs)
+    if name == 'local':
+        return local.Executor(**kwargs)
+    raise SchedulerNotFound(name)
 
 def probe(partition, **kwargs):
     if slurm.Executor.available():
@@ -24,7 +28,8 @@ def probe(partition, **kwargs):
         return pbsubmit.Executor(partition, **kwargs)
     if lsf.Executor.available():
         return lsf.Executor(partition, **kwargs)
-    raise NoSchedulerDetected()
+    logger.debug('no schedulers detected, so returning a local executor')
+    return local.Executor(**kwargs)
 
 def which(x):
     for p in os.environ.get('PATH').split(os.pathsep):
@@ -42,8 +47,5 @@ class CalledProcessError(Exception):
         self.stderr = stderr
 
 class SchedulerNotFound(Exception):
-    pass
-
-class NoSchedulerDetected(SchedulerNotFound):
     pass
 
