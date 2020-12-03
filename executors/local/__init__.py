@@ -14,7 +14,7 @@ logger = logging.getLogger('local')
 
 class Executor(AbstractExecutor):
     def __init__(self, **kwargs):
-        self.process = None
+        self.ptab = dict()
         self.poll_timeout = 60
         self.poll_delay = 1
 
@@ -35,12 +35,13 @@ class Executor(AbstractExecutor):
         logger.debug(cmd)
         if job.error is None:
             job.error = job.output
-        self.process = sp.Popen(
+        p = sp.Popen(
             cmd,
             stdout=open(job.output, 'w'),
             stderr=open(job.error, 'w')
         )
-        job.pid = self.process.pid
+        job.pid = p.pid
+        self.ptab[job.pid] = p
 
     def cancel(self, job, wait=False):
         '''
@@ -70,9 +71,9 @@ class Executor(AbstractExecutor):
                 raise TimeoutError('exceeded wait time {0}s for job {1}'.format(self.poll_timeout, job_id))
             time.sleep(self.poll_delay)
 
-    def _cancel_async(self, job_id):
-        logger.debug('killing pid %s', job_pid)
-        self.process.kill()
+    def _cancel_async(self, pid):
+        logger.debug('killing pid %s', pid)
+        self.ptab[pid].kill()
 
     def update(self, job, wait=False):
         '''
@@ -83,11 +84,12 @@ class Executor(AbstractExecutor):
         :param wait: Wait for job state to be updated
         :type wait: bool
         '''
-        self.process.poll()
+        p = self.ptab[job.pid]
+        p.poll()
         job.active = True
-        if self.process.returncode is not None:
+        if p.returncode is not None:
             job.active = False
-            job.returncode = self.process.returncode
+            job.returncode = p.returncode
 
     def update_many(self, jobs, wait=False):
         '''
