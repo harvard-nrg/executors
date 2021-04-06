@@ -72,6 +72,7 @@ class JobArray(object):
                 if len(self.running) < limit:
                     self.E.submit(job)
                     self.running[job.pid] = job
+                    logger.debug('%s was submitted with pid %s', job.name, job.pid)
                     submitted = True
                     if delay:
                         time.sleep(delay)
@@ -96,11 +97,11 @@ class JobArray(object):
             if job.returncode == None:
                 continue
             elif job.returncode == 0:
-                logger.debug('job %s returncode is %s', job.pid, job.returncode)
+                logger.debug('job %s (%s) returncode is %s', job.pid, job.name, job.returncode)
                 self.complete[pid] = job
                 del self.running[pid]
             elif job.returncode > 0:
-                logger.debug('job %s returncode is %s', job.pid, job.returncode)
+                logger.debug('job %s (%s) returncode is %s', job.pid, job.name, job.returncode)
                 self.failed[pid] = job
                 del self.running[pid]
 
