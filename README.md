@@ -1,23 +1,10 @@
 Executors
 =========
-Things can get pretty gnarly if you want to write scripts that work transparently 
-across different job schedulers (or outside of a job scheduler). Over time, it's 
-easy to find yourself becoming tied down to a specific job scheduler. Executors 
-attempts to solve this problem without imposing a hefty framework on the end user. 
-Just tell Executors what command you want to run and it'll run it on whatever's 
-available.
-
-There are usually a small set of operations that you need to execute a job on any
-system. Executors exposes operations to `submit`, `update`, and `cancel` a job. 
-With these methods, you can build fairly sophisticated tools quickly. Best of 
-all, everything is portable! If you need to run your command on a local machine 
-today, Slurm tomorrow, and LSF next week, your code should be smart enough to adapt 
-to whatever execution environment is present.
-
-Executors also provides a special `JobArray` class for building and managing 
-collections of jobs as a single object. There are no restrictionson the size 
-or shape of jobs that you can add to a `JobArray` and you can setup convenient 
-behaviors e.g., killing all remaining jobs if a single job fails.
+Software needs to be smart enough to adapt to the execution environment without needing 
+much from the end user. At its core, Executors settles on a small set of high-level 
+operations e.g., `submit`, `update` (query), and `cancel` that seem to map quite well 
+across different computing environments. If you need to run your command on a local machine, 
+Slurm, LSF, or some futuristic execution environment, Executors can do it! Transparently (well, sort of)!
 
 ## Table of contents
 1. [Installation](#installation)
