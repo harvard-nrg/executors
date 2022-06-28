@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import os
+import sys
 import time
 import logging
 import executors
@@ -14,12 +15,19 @@ def main():
     parser = ap.ArgumentParser()
     parser.add_argument('-s', '--scheduler')
     parser.add_argument('-p', '--partition', default=None)
+    parser.add_argument('-m', '--mem', default='100M')
+    parser.add_argument('-t', '--time', default=10)
+    parser.add_argument('-n', '--name', default='example')
     parser.add_argument('--debug', action='store_true')
     parser.add_argument('command', nargs=ap.REMAINDER)
     args = parser.parse_args()
     
     if args.debug:
         logger.setLevel(logging.DEBUG)
+
+    if not args.command:
+        logger.critical('did you forget to pass a command?')
+        sys.exit(1)
 
     # get executor
     if args.scheduler:
@@ -28,37 +36,37 @@ def main():
         E = executors.probe(args.partition)
 
     # create a job 
-    logger.info('building the job object')
+    logger.info('building a job object')
     job = Job(
-        command=['echo', 'Hello, World!'],
-        memory='100M',
-        time='10',
-        name='simple',
-        output='~/simple-%j.stdout',
-        error='~/simple-%j.stderr'
+        command=args.command,
+        memory=args.mem,
+        time=str(args.time),
+        name=args.name,
+        output=f'{args.name}-%j.stdout',
+        error=f'{args.name}-%j.stderr'
     )
 
     # submit the job
     logger.info('submitting the job')
     E.submit(job)
-    logger.info('job %s activity is %s', job.pid, job.active)
+    logger.info(f'job {job.pid} activity is {job.active}')
     
     # update the job object asyncronously
-    logger.info('updating job %s object asyncronously', job.pid)
+    logger.info(f'updating job {job.pid} object asyncronously')
     E.update(job)
-    logger.info('job %s activity is %s', job.pid, job.active)
+    logger.info(f'job {job.pid} activity is {job.active}')
 
     # now update the job syncronously
-    logger.info('updating job %s object syncronously', job.pid)
+    logger.info(f'updating job {job.pid} object syncronously')
     E.update(job, wait=True)
-    logger.info('job %s activity is %s', job.pid, job.active)
+    logger.info(f'job {job.pid} activity is {job.active}')
 
     # now wait for job to finish
-    logger.info('waiting for job %s to finish', job.pid)
+    logger.info(f'waiting for job {job.pid} to finish')
     while True:
         E.update(job)
         if not job.active:
-            logger.info('job %s returncode is %s', job.pid, job.returncode)
+            logger.info(f'job {job.pid} returncode is {job.returncode}')
             break
         time.sleep(10)
 

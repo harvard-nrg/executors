@@ -41,6 +41,8 @@ class Executor(AbstractExecutor):
             stderr=open(job.error, 'w')
         )
         job.pid = p.pid
+        os.rename(job.output, job.output.replace('%j', str(job.pid)))
+        os.rename(job.error, job.error.replace('%j', str(job.pid)))
         self.ptab[job.pid] = p
 
     def cancel(self, job, wait=False):

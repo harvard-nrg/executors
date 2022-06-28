@@ -1,19 +1,23 @@
 Executors
 =========
-If you want to write scripts that work transparently across different job 
-schedulers, things can get weird, and it's easy to find yourself locked into 
-a specific job scheduler. Executors tries to eliminate this challenge. Just 
-tell Executors to run a command and it will run it on whatever is available.
+Things can get pretty gnarly if you want to write scripts that work transparently 
+across different job schedulers (or outside of a job scheduler). Over time, it's 
+easy to find yourself becoming tied down to a specific job scheduler. Executors 
+attempts to solve this problem without imposing a hefty framework on the end user. 
+Just tell Executors what command you want to run and it'll run it on whatever's 
+available.
 
-Each scheduler within Executors will expose methods to `submit`, `update`, and 
-`cancel` a job. With these methods, you can build fairly sophisticated tools 
-quickly. If you need to run on your local machine today, Slurm tomorrow, and 
-LSF next week, you don't need to change anything. 
+There are usually a small set of operations that you need to execute a job on any
+system. Executors exposes operations to `submit`, `update`, and `cancel` a job. 
+With these methods, you can build fairly sophisticated tools quickly. Best of 
+all, everything is portable! If you need to run your command on a local machine 
+today, Slurm tomorrow, and LSF next week, your code should be smart enough to adapt 
+to whatever execution environment is present.
 
 Executors also provides a special `JobArray` class for building and managing 
 collections of jobs as a single object. There are no restrictionson the size 
-or shape of jobs that you can add to a `JobArray`. You can also setup 
-convenient behaviors such as killing all remaining jobs if a single job fails.
+or shape of jobs that you can add to a `JobArray` and you can setup convenient 
+behaviors e.g., killing all remaining jobs if a single job fails.
 
 ## Table of contents
 1. [Installation](#installation)
@@ -68,7 +72,13 @@ E = executors.get('local')
 
 Note that for schedulers other than `local`, you will need to pass in a second 
 argument called `partition_name`. This referred to as a `queue` in some job 
-schedulers.
+schedulers
+
+```python
+import executors
+
+E = executors.get('slurm', 'partition_name')
+```
 
 ### instantiate a `Job`
 Next, you have to create a `Job`. See below for descriptions of the supported 
@@ -82,20 +92,17 @@ job = Job(
     command=['echo', 'Hello, World!'],
     memory='100M',
     time='10',
-    cpus=1,
-    nodes=1,
     output='~/job-%j.stdout',
-    error='~/job-%j.stderr',
-    parent=parent
+    error='~/job-%j.stderr'
 )
 ```
 
 * `name`: Job name (required)
 * `command`: Command to be executed (required)
-* `memory`: Amount of memory required e.g., `1000K`, `100M`, `10G`, `1TB` (required)
-* `time`: Amount of time required in seconds (required)
-* `cpus`: Number of processors needed (default=1)
-* `nodes`: Number of nodes needed (default=1)
+* `memory`: Amount of memory to reserve e.g., `1000K`, `100M`, `10G`, `1TB` (required)
+* `time`: Amount of time to reserve, in seconds (required)
+* `cpus`: Number of processors to reserve (default=1)
+* `nodes`: Number of nodes to reserve (default=1)
 * `output`: Path to standard output. Any occurrence of `%j` will be replaced with Job ID.
 * `error`: Path to standard error. Any occurrence of `%j` will be replaced with Job ID.
 * `parent`: Parent job object a.k.a job dependency.
@@ -106,43 +113,53 @@ been submitted, the `job.pid` property will be set
 
 ```python
 E.submit(job)
-print('the job id is {0}'.format(job.pid))
+print(f'the job id is {job.pid}')
 ```
 
-When the job finishes, you can check it's `returncode`.
+When the job finishes, you can check it's `returncode`
+
+```python
+print(f'the job returncode is {job.returncode}')
+
+```
 
 ### updating the `Job` state
-Each `Job` has an `active` and `returncode` property. By default, these are 
-both set to `None`. These properties will be updated each time you call 
+Each `Job` has `active` and `returncode` properties. By default, these are 
+both set to `None`. These properties will be updated every time you call 
 `E.update(job)`
 
 ```python
 E.update(job)
-print('job {0} has state {1} and returncode is {2}'.format(job.pid, job.active, job.returncode))
+print(f'job {job.pid} has state {job.active} and returncode {job.returncode}')
 ```
 
-> Some job schedulers will allow you to submit a job but you cannot instantly 
-> begin querying the job state, therefore Executors cannot always *guarantee* that 
-> `E.update` will update the `Job` state. If you must have `E.update` wait until 
-> a job is visible, add the argument `wait=True`.
+Keep in mind that even though you have submitted a job, you may not be able to 
+immediately query its state. For this reason, Executors cannot *guarantee* that 
+calling `E.update` will update your `Job` state. If you want `E.update` to wait 
+until a job is able to be queried, add the argument `wait=True`
+
+```python
+E.update(job, wait=True)
+```
 
 ### update many `Job` states
-Some job schedulers offer more efficient ways to query the state of multiple 
-jobs. For that reason, if you have a `list` or `generator` of `Job` objects, 
+Some job schedulers offer efficient ways to query the state of multiple jobs. 
+For that reason, if you have a `list` (or `generator`) of `Job` objects, 
 you can pass those to the `update_many` method
 
 ```python
 E.update_many(jobs)
 ```
 
-> Some `Executor` objects can optimize how `update_many` is fulfilled, others 
-> will resort to serially querying one job after the other. This could cause 
-> a linear slow down.
+> Some `Executor` objects optimize how `update_many` is fulfilled, while others 
+> will resort to serially querying one job after the other which could result in 
+> poor performance.
 
 # Job arrays
-There are times when you want to submit several related jobs and control them 
-as a group. A common need is to cancel remaining jobs if any single job has 
-failed. This is what the `JobArray` class is for. Let's give it a whirl
+There are times when you may want to submit several related jobs and control 
+them as a group. A common need is to cancel all remaining jobs if any single job 
+has failed. This is precisely what the `JobArray` class is for. Let's take a look 
+at an example
 
 ```python
 from executors.models import JobArray
@@ -157,8 +174,9 @@ jobarray.submit()
 jobarray.wait()
 ```
 
-To impose rate limiting on the number of jobs running concurrently, use the 
-`limit` argument. For example, to only have 1 job running at a time
+To impose rate limiting on the number of jobs submitted concurrently, use the 
+`limit` argument. For example, use `limit=1` to have only 1 job running at a 
+time
 
 ```python
 jobarray.submit(limit=1)
@@ -172,7 +190,7 @@ you must create a new module within the top-level `executors` module, for exampl
 executors/awsbatch/__init__.py
 ```
 
-Now, within this module you must create a new `Executor` class that extends 
+Next, within this module, you must create a new `Executor` class that extends 
 `executors.models.AbstractExecutor`
 
 ```python

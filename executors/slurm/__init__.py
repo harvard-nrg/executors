@@ -94,6 +94,8 @@ class Executor(AbstractExecutor):
         '''
         if not commons.which('sbatch'):
             raise CommandNotFound('sbatch')
+        if not self.partition:
+            raise SbatchError('no slurm partition was defined')
         cmd = [
             'sbatch',
             '--parsable',
