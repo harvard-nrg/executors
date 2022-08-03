@@ -1,10 +1,10 @@
 Executors
 =========
 Software needs to be smart enough to adapt to the execution environment without needing 
-much from the end user. At its core, Executors settles on a small set of high-level 
+much input from the end user. At its core, Executors settles on a small set of high-level 
 operations e.g., `submit`, `update` (query), and `cancel` that seem to map quite well 
 across different computing environments. If you need to run your command on a local machine, 
-Slurm, LSF, or some futuristic execution environment, Executors can do it! Transparently (well, sort of)!
+Slurm, LSF, or some futuristic execution environment, `executors` can do it!
 
 ## Table of contents
 1. [Installation](#installation)
