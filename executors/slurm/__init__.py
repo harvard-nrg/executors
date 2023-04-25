@@ -269,6 +269,8 @@ class Executor(AbstractExecutor):
             arguments.extend(['--mem', job.memory])
         if hasattr(job, 'cpus') and job.cpus:
             arguments.extend(['--ntasks', str(job.cpus)])
+        if hasattr(job, 'gpus') and job.gpus:
+            arguments.extend(['--gres', str(job.gpus)])
         if hasattr(job, 'nodes') and job.nodes:
             arguments.extend(['--nodes', str(job.nodes)])
         if hasattr(job, 'output') and job.output:

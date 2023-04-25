@@ -89,6 +89,7 @@ job = Job(
 * `memory`: Amount of memory to reserve e.g., `1000K`, `100M`, `10G`, `1TB` (required)
 * `time`: Amount of time to reserve, in seconds (required)
 * `cpus`: Number of processors to reserve (default=1)
+* `gpus`: Number of GPUs to reserve
 * `nodes`: Number of nodes to reserve (default=1)
 * `output`: Path to standard output. Any occurrence of `%j` will be replaced with Job ID.
 * `error`: Path to standard error. Any occurrence of `%j` will be replaced with Job ID.
