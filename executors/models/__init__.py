@@ -6,7 +6,7 @@ import executors.commons as commons
 logger = logging.getLogger(__name__)
 
 class Job(object):
-    def __init__(self, command, memory, time, cpus=1, nodes=1, name=None, output=None, error=None, parent=None):
+    def __init__(self, command, memory, time, cpus=1, nodes=1, gpus=None, name=None, output=None, error=None, parent=None):
         self.name = name
         self.command = command
         self.memory = memory
@@ -14,12 +14,13 @@ class Job(object):
         self.parent = parent
         self.output = output
         self.error = error
-        # these are set by the Executor object
+        self.cpus = cpus
+        self.gpus = gpus
+        self.nodes = nodes
+        # these fields are managed by an Executor
         self.pid = None
         self.returncode = None
         self.active = None
-        self.cpus = None
-        self.nodes = None
 
 class JobArray(object):
     def __init__(self, executor, cancel_on_fail=False):

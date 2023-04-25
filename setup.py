@@ -5,7 +5,8 @@ here = os.path.abspath(os.path.dirname(__file__))
 
 requires = [
     'paramiko',
-    'ratelimit'
+    'ratelimit',
+    'six'
 ]
 
 test_requirements = [

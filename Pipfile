@@ -9,4 +9,5 @@ pytest = "*"
 [packages]
 paramiko = "*"
 ratelimit = "*"
+six = "*"
 executors = {path = ".",editable = true}
