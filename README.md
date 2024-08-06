@@ -87,7 +87,7 @@ job = Job(
 * `name`: Job name (required)
 * `command`: Command to be executed (required)
 * `memory`: Amount of memory to reserve e.g., `1000K`, `100M`, `10G`, `1TB` (required)
-* `time`: Amount of time to reserve, in seconds (required)
+* `time`: Amount of time to reserve, in minutes (required)
 * `cpus`: Number of processors to reserve (default=1)
 * `gpus`: Number of GPUs to reserve
 * `nodes`: Number of nodes to reserve (default=1)
