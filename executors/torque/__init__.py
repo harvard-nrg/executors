@@ -1,13 +1,11 @@
 import os
 import re
 import logging
-import paramiko
-import getpass as gp
 import subprocess as sp
-import xml.etree.ElementTree as et
 from executors.commons import which
 from executors.models import AbstractExecutor
 from executors.exceptions import ExecutorNotFound, CommandNotFound, TimeoutError
+from ratelimit import limits, sleep_and_retry
 
 logger = logging.getLogger(__name__)
 
@@ -43,36 +41,43 @@ class Executor(AbstractExecutor):
 
     @staticmethod
     def available():
-        if which('pbsubmit'):
+        if which('qsub'):
             return True
         return False
 
     def submit(self, job):
+        prefix = '{0}-%j'.format(job.name) if job.name else '%j'
+        if not job.output:
+            job.output = os.path.expanduser('~/{0}.out'.format(prefix))
+        if not job.error:
+            job.error = os.path.expanduser('~/{0}.err'.format(prefix))
         command = job.command
         if isinstance(command, list):
             command = sp.list2cmdline(command)
-        if not which('pbsubmit'):
-            raise CommandNotFound('pbsubmit')
+        if not which('qsub'):
+            raise CommandNotFound('qsub')
+
         cmd = [
-            'pbsubmit',
-            '-q', self.partition
+            'qsub',
+            '-q', self.partition,
+            '-d', os.getcwd()
         ]
+        cmd.extend(self._default_args)
         cmd.extend(self._arguments(job))
-        cmd.extend([
-            '-c', command
-        ])
+        job_script = f'#!/bin/bash\n{command}'
         logger.debug(sp.list2cmdline(cmd))
-        output = sp.check_output(cmd, stderr=sp.STDOUT).decode('utf-8')
-        output = output.strip().split('\n')
-        pid = output[-1]
+        output = sp.check_output(
+            cmd,
+            stderr=sp.STDOUT,
+            input=job_script.encode(),
+        ).decode().strip()
+        pid = re.search(r'^(\d+)', output).group(0)
         job.pid = pid
-        self._alter_logs(job) # insert pid into stdout and stderr files
-        pbsjob = re.match(r'^Opening pbsjob_(\d+)', output[0]).groups(0)[0]
-        job.pbsjob = pbsjob
+        self._alter_logs(job)
+        logger.debug('parsed job id %s', pid)
 
     def _alter_logs(self, job):
-        match = re.match(r'^(\d+)\.', job.pid)
-        pid = match.group(1)        
+        pid = job.pid
         qalter_args = list()
         if job.output and '%j' in job.output:
             output = job.output.replace('%j', pid)
@@ -87,11 +92,20 @@ class Executor(AbstractExecutor):
             sp.check_output(cmd)
 
     def update(self, job, wait=False):
-        xml = self.qstat(job)
-        job_state = xml.findtext('.//job_state')
-        exit_status = xml.findtext('.//exit_status')
-        output_path = re.sub(r'^.*:', '', xml.findtext('.//Output_Path'))
-        error_path = re.sub(r'^.*:', '', xml.findtext('.//Error_Path'))
+        try:
+            output = self.qstat(job)
+        except QstatUnknownJobError as e:
+            job.active = False
+            job.returncode = 1
+            return
+        job_state = re.search(r'job_state = (.*)', output).group(1)
+        exit_status = re.search(r'exit_status = (.*)', output)
+        if not exit_status:
+            exit_status = -1
+        else:
+            exit_status = exit_status.group(1)
+        output_path = re.search(r'Output_Path = (.*)', output).group(1)
+        error_path = re.search(r'Error_Path = (.*)', output).group(1)
         logger.debug('job {0} is in {1} state'.format(job.pid, job_state))
         if job_state in Executor.ACTIVE:
             job.active = True
@@ -128,12 +142,13 @@ class Executor(AbstractExecutor):
             else:
                 raise e
 
+    @sleep_and_retry
+    @limits(calls=5, period=20)
     def qstat(self, job):
         if not which('qstat'):
             raise CommandNotFound('qstat')
         cmd = [
             'qstat',
-            '-x',
             '-f',
             job.pid
         ]
@@ -141,46 +156,12 @@ class Executor(AbstractExecutor):
         try:
             output = sp.check_output(cmd)
         except sp.CalledProcessError as e:
-            if e.returncode == 170:
-                logger.debug('job %s already in completed state, falling back to jobinfo', job.pid)
-                output = self.jobinfo(job)
-            elif e.returncode == 153:
-                logger.debug('job %s unknown to the scheduler, falling back to jobinfo', job.pid)
-                output = self.jobinfo(job)
+            if e.returncode == 153:
+                logger.debug('job %s is unknown to the scheduler', job.pid)
+                raise QstatUnknownJobError(job)
             else:
                 raise e
-        return et.fromstring(output.strip())
-
-    def jobinfo(self, job, node='launchpad'):
-        cmd = [
-            'jobinfo',
-            job.pid
-        ]
-        username = gp.getuser()
-        # ssh into head node to get job info
-        logging.getLogger('paramiko').setLevel(logging.INFO)
-        client = paramiko.SSHClient()
-        client.load_system_host_keys()
-        client.connect(node)
-        logger.debug('jobinfo command %s', cmd)
-        _,stdout,_ = client.exec_command(sp.list2cmdline(cmd))
-        stdout = stdout.read()
-        client.close()
-        # get job pid without domain  
-        match = re.match(r'^(\d+)\.', job.pid)
-        pid = match.group(1)
-        # parse exit status
-        stdout = stdout.decode('utf-8').strip().split('\n')
-        match = re.match(r'^\s+Exit status: (-?\d+)$', stdout[-1])
-        exit_status = match.group(1)
-        logger.debug('discovered exit status: %s', exit_status)
-        # build XML output similar to qstat -x
-        root = et.Element('jobinfo')
-        et.SubElement(root, 'job_state').text = 'C'
-        et.SubElement(root, 'exit_status').text = exit_status
-        et.SubElement(root, 'Output_Path').text = '/pbs/{0}/pbsjob_{1}.o{2}'.format(username, job.pbsjob, pid)
-        et.SubElement(root, 'Error_Path').text = '/pbs/{0}/pbsjob_{1}.e{2}'.format(username, job.pbsjob, pid)
-        return et.tostring(root)
+        return output.decode()
 
     def _parse_mem_value(self, s):
         try:
@@ -204,13 +185,13 @@ class Executor(AbstractExecutor):
         arguments = list()
         qsub_opts = dict()
         if hasattr(job, 'output') and job.output:
-            arguments.extend(['-O', os.path.expanduser(job.output)])
+            arguments.extend(['-o', os.path.expanduser(job.output)])
         if hasattr(job, 'error') and job.error:
-            arguments.extend(['-E', os.path.expanduser(job.error)])
+            arguments.extend(['-e', os.path.expanduser(job.error)])
         if hasattr(job, 'parent') and job.parent:
             arguments.extend(['-W', 'depend=afterok:{0}'.format(job.parent.pid)])
         if hasattr(job, 'name') and job.name:
-            arguments.extend(['-o', '-N {0}'.format(job.name)])
+            arguments.extend(['-N', job.name])
         if hasattr(job, 'memory') and job.memory:
             qsub_opts['vmem'] = self._parse_mem_value(job.memory)
         if hasattr(job, 'processors') and job.processors:
@@ -231,4 +212,7 @@ class IndecipherableMemoryArgument(Exception):
     pass
 
 class QstatError(Exception):
+    pass
+
+class QstatUnknownJobError(QstatError):
     pass

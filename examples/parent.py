@@ -27,7 +27,7 @@ def main():
     logger.info('building the job object')
     parent = Job(
         command=['echo', 'parent'],
-        memory='10M',
+        memory='32M',
         time='10',
         name='parent',
         output='~/parent-%j.out',
@@ -36,7 +36,7 @@ def main():
 
     child = Job(
         command=['echo', 'child'],
-        memory='10M',
+        memory='32M',
         time='10',
         name='child',
         output='~/child-%j.out',

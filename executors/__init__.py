@@ -5,6 +5,7 @@ import executors.lsf as lsf
 import executors.slurm as slurm
 import executors.local as local
 import executors.pbsubmit as pbsubmit
+import executors.torque as torque
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +14,8 @@ def get(name, partition='default', **kwargs):
         return slurm.Executor(partition, **kwargs)
     if name == 'pbsubmit':
         return pbsubmit.Executor(partition, **kwargs)
+    if name == 'torque':
+        return torque.Executor(partition, **kwargs)
     if name == 'lsf':
         return lsf.Executor(partition, **kwargs)
     if name == 'local':
@@ -23,6 +26,9 @@ def probe(partition, **kwargs):
     if slurm.Executor.available():
         logger.debug('detected slurm job scheduler')
         return slurm.Executor(partition, **kwargs)
+    if torque.Executor.available():
+        logger.debug('detected torque job scheduler')
+        return torque.Executor(partition, **kwargs)
     if pbsubmit.Executor.available():
         logger.debug('detected pbsubmit job scheduler')
         return pbsubmit.Executor(partition, **kwargs)

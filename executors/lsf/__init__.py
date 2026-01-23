@@ -65,7 +65,7 @@ class Executor(AbstractExecutor):
         ])
         logger.debug(sp.list2cmdline(cmd))
         output = sp.check_output(cmd, stderr=sp.STDOUT).strip().decode()
-        pid = re.search('^Job <(\d+)>', output).group(1)
+        pid = re.search(r'^Job <(\d+)>', output).group(1)
         logger.debug('parsed job id %s', pid)
         job.pid = pid
  
@@ -118,13 +118,13 @@ class Executor(AbstractExecutor):
             output = sp.check_output(cmd).strip().decode()
         except sp.CalledProcessError as e:
             raise e
-        pid = re.match('Job <(\d+)>', output).group(1)
-        job_state = re.search('Status <(\w+)>', output).group(1)
+        pid = re.match(r'Job <(\d+)>', output).group(1)
+        job_state = re.search(r'Status <(\w+)>', output).group(1)
         exit_status = None
         if job_state in Executor.INACTIVE:
             exit_status = 0
             if job_state == 'EXIT':
-                exit_status = re.search('Exited with exit code (\d+).', output).group(1)
+                exit_status = re.search(r'Exited with exit code (\d+).', output).group(1)
         return {
             'pid': pid,
             'job_state': job_state,
@@ -135,7 +135,7 @@ class Executor(AbstractExecutor):
 
     def _parse_mem_value(self, s):
         try:
-            match = re.match('^(\d+)(K|KB|M|MB|G|GB|T|TB)$', s)
+            match = re.match(r'^(\d+)(K|KB|M|MB|G|GB|T|TB)$', s)
             size,unit = match.group(1),match.group(2)
         except:
             raise IndecipherableMemoryArgument(m)

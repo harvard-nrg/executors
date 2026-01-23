@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.DEBUG)
 def main():
     parser = ap.ArgumentParser()
     parser.add_argument('-s', '--scheduler')
-    parser.add_argument('-p', '--partition', default=None)
+    parser.add_argument('-p', '--partition', required=True)
     parser.add_argument('-m', '--mem', default='100M')
     parser.add_argument('-t', '--time', default=10)
     parser.add_argument('-n', '--name', default='example')
